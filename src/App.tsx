@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   CalendarEvent,
   Task,
@@ -46,6 +46,14 @@ import { AddTaskModal } from './components/AddTaskModal';
 import { ScheduleProposalModal } from './components/ScheduleProposalModal';
 import { AICopilotDrawer } from './components/AICopilotDrawer';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
+import { SyncModal } from './components/SyncModal';
+
+import { 
+  DEFAULT_SYNC_KEY, 
+  savePlannerToCloud, 
+  subscribeToPlannerCloud, 
+  SyncDataPayload 
+} from './lib/firebase';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
@@ -61,6 +69,37 @@ export function App() {
     }
   };
 
+  // Device Session ID
+  const deviceIdRef = useRef<string>(
+    sessionStorage.getItem('planner_device_id') || (() => {
+      const newId = Math.random().toString(36).substring(2, 9);
+      sessionStorage.setItem('planner_device_id', newId);
+      return newId;
+    })()
+  );
+
+  // Sync Key State
+  const [syncKey, setSyncKey] = useState<string>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const paramKey = urlParams.get('sync');
+      if (paramKey && paramKey.trim()) {
+        const cleaned = paramKey.trim().toLowerCase();
+        localStorage.setItem('planner_sync_key', cleaned);
+        return cleaned;
+      }
+    } catch (e) {
+      console.warn('URL query parse error:', e);
+    }
+    return loadStorage('planner_sync_key', DEFAULT_SYNC_KEY);
+  });
+
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState<boolean>(false);
+  const [isSynced, setIsSynced] = useState<boolean>(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+
+  const isRemoteUpdatingRef = useRef<boolean>(false);
+
   // Core Persistent States (Default empty for fresh user start)
   const [events, setEvents] = useState<CalendarEvent[]>(() => loadStorage('planner_events', []));
   const [tasks, setTasks] = useState<Task[]>(() => loadStorage('planner_tasks', []));
@@ -73,6 +112,87 @@ export function App() {
   const [categories, setCategories] = useState<CategoryDef[]>(() => loadStorage('planner_categories', INITIAL_CATEGORIES));
   const [subCategories, setSubCategories] = useState<SubCategoryDef[]>(() => loadStorage('planner_subcategories', INITIAL_SUBCATEGORIES));
   const [notifications, setNotifications] = useState<NotificationSettings>(() => loadStorage('planner_notifications', INITIAL_NOTIFICATIONS));
+
+  // Subscribe to Cloud Firestore real-time updates
+  useEffect(() => {
+    if (!syncKey) return;
+
+    const unsubscribe = subscribeToPlannerCloud(syncKey, (cloudData) => {
+      if (!cloudData) return;
+
+      if (cloudData.deviceId === deviceIdRef.current) {
+        setIsSynced(true);
+        setLastSyncedAt(new Date());
+        return;
+      }
+
+      isRemoteUpdatingRef.current = true;
+      if (Array.isArray(cloudData.events)) setEvents(cloudData.events);
+      if (Array.isArray(cloudData.tasks)) setTasks(cloudData.tasks);
+      if (Array.isArray(cloudData.workConstraints)) setConstraints(cloudData.workConstraints);
+      if (Array.isArray(cloudData.timeTrackSessions)) setTrackingSessions(cloudData.timeTrackSessions);
+      if (cloudData.userProfile) setProfile(cloudData.userProfile);
+      if (cloudData.weeklyReport) setWeeklyReport(cloudData.weeklyReport);
+      if (cloudData.monthlyReport) setMonthlyReport(cloudData.monthlyReport);
+      if (Array.isArray(cloudData.feedbackLogs)) setFeedbackLogs(cloudData.feedbackLogs);
+      if (Array.isArray(cloudData.categories)) setCategories(cloudData.categories);
+      if (Array.isArray(cloudData.subCategories)) setSubCategories(cloudData.subCategories);
+
+      setIsSynced(true);
+      setLastSyncedAt(new Date());
+
+      setTimeout(() => {
+        isRemoteUpdatingRef.current = false;
+      }, 150);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [syncKey]);
+
+  // Save changes automatically to Cloud Firestore
+  useEffect(() => {
+    if (isRemoteUpdatingRef.current) return;
+
+    const timer = setTimeout(() => {
+      const payload: SyncDataPayload = {
+        events,
+        tasks,
+        workConstraints: constraints,
+        timeTrackSessions: trackingSessions,
+        userProfile: profile,
+        weeklyReport,
+        monthlyReport,
+        feedbackLogs,
+        categories,
+        subCategories,
+        notifications
+      };
+
+      savePlannerToCloud(syncKey, payload, deviceIdRef.current)
+        .then(() => {
+          setIsSynced(true);
+          setLastSyncedAt(new Date());
+        })
+        .catch((err) => console.error('Cloud save failed:', err));
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [
+    events,
+    tasks,
+    constraints,
+    trackingSessions,
+    profile,
+    weeklyReport,
+    monthlyReport,
+    feedbackLogs,
+    categories,
+    subCategories,
+    notifications,
+    syncKey
+  ]);
 
   // Auto wipe old mock data on first mount if requested
   useEffect(() => {
@@ -553,8 +673,10 @@ export function App() {
         onOpenAddTask={() => setIsAddTaskOpen(true)}
         onTriggerAISchedule={handleTriggerAISchedule}
         onResetData={handleResetData}
+        onOpenSyncModal={() => setIsSyncModalOpen(true)}
         isAIScheduling={isAIScheduling}
         activeTimerRunning={false}
+        isSynced={isSynced}
       />
 
       {/* PWA Install Notification / Banner */}
@@ -710,6 +832,18 @@ export function App() {
         onClose={() => setIsCopilotOpen(false)}
         onOpen={() => setIsCopilotOpen(true)}
         stateContext={{ events, tasks, profile, constraints }}
+      />
+
+      <SyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+        syncKey={syncKey}
+        onUpdateSyncKey={(newKey) => {
+          setSyncKey(newKey);
+          localStorage.setItem('planner_sync_key', newKey);
+        }}
+        isSynced={isSynced}
+        lastSyncedAt={lastSyncedAt}
       />
 
     </div>

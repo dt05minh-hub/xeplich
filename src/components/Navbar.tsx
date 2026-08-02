@@ -22,8 +22,10 @@ interface NavbarProps {
   onOpenAddTask: () => void;
   onTriggerAISchedule: () => void;
   onResetData: () => void;
+  onOpenSyncModal: () => void;
   isAIScheduling: boolean;
   activeTimerRunning: boolean;
+  isSynced: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -34,8 +36,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAddTask,
   onTriggerAISchedule,
   onResetData,
+  onOpenSyncModal,
   isAIScheduling,
-  activeTimerRunning
+  activeTimerRunning,
+  isSynced
 }) => {
   const navItems = [
     {
@@ -148,6 +152,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Top Actions */}
           <div className="flex items-center space-x-2 shrink-0">
+            {/* Sync Cloud Button */}
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={onOpenSyncModal}
+              className={`h-9 px-3 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all border shadow-2xs ${
+                isSynced 
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100' 
+                  : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+              }`}
+              title="Đồng bộ thời gian thực PC & Điện thoại"
+            >
+              <Zap className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
+              <span className="hidden sm:inline font-bold">Đồng bộ</span>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+            </motion.button>
+
             {/* AI Auto Schedule Trigger Button */}
             <motion.button
               whileHover={{ scale: 1.03 }}

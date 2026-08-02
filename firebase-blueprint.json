@@ -1,0 +1,19 @@
+{
+  "entities": {
+    "planners": {
+      "title": "Planner Data",
+      "description": "User planner state synchronized across devices",
+      "properties": {
+        "tasks": { "type": "array" },
+        "calendarEvents": { "type": "array" },
+        "userProfile": { "type": "object" },
+        "categories": { "type": "array" },
+        "subCategories": { "type": "array" },
+        "timeTrackSessions": { "type": "array" },
+        "feedbackLogs": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["updatedAt"]
+    }
+  }
+}
