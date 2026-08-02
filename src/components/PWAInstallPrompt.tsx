@@ -192,8 +192,16 @@ export const PWAInstallPrompt: React.FC = () => {
                 </ol>
               </div>
 
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs font-medium space-y-1">
+                <p className="font-bold flex items-center gap-1 text-amber-950">
+                  ⚠️ Lưu ý quan trọng để tránh lỗi cài đặt:
+                </p>
+                <p>• <strong>iPhone / iPad:</strong> Bắt buộc phải mở bằng trình duyệt <strong>Safari</strong> (Apple chặn cài PWA từ Chrome hay ứng dụng khác trên iOS).</p>
+                <p>• <strong>Tránh trình duyệt ẩn trong app:</strong> Nếu mở link từ Zalo, Messenger, Facebook, TikTok..., hãy bấm nút <strong>"Mở bằng trình duyệt ngoài"</strong> (Safari / Chrome) trước khi cài đặt.</p>
+              </div>
+
               <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl text-slate-600 text-xs">
-                💡 <strong>Ưu điểm PWA:</strong> Không tốn dung lượng bộ nhớ, không cần qua App Store/Google Play, chạy mượt mà không thanh địa chỉ, hỗ trợ ngoại tuyến cơ bản.
+                💡 <strong>Ưu điểm PWA:</strong> Không tốn dung lượng bộ nhớ, không cần qua App Store/Google Play, chạy mượt mà như app gốc, tự động đồng bộ đệm đám mây.
               </div>
 
             </div>

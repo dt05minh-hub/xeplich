@@ -1,4 +1,4 @@
-const CACHE_NAME = 'adaptive-planner-v1';
+const CACHE_NAME = 'adaptive-planner-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -10,9 +10,14 @@ const ASSETS_TO_CACHE = [
 // Install Event
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
       console.log('[PWA SW] Caching app shell');
-      return cache.addAll(ASSETS_TO_CACHE);
+      // Use Promise.allSettled so individual missing assets don't break SW installation
+      await Promise.allSettled(
+        ASSETS_TO_CACHE.map((url) =>
+          cache.add(url).catch((err) => console.warn('[PWA SW] Cache add failed for', url, err))
+        )
+      );
     }).then(() => self.skipWaiting())
   );
 });
@@ -33,8 +38,13 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event - Network First with Cache Fallback for navigation, Cache First for static
+// Fetch Event - ONLY handle GET requests to same origin
 self.addEventListener('fetch', (event) => {
+  // CRITICAL: Skip non-GET requests (e.g. POST/PUT/DELETE for APIs or Firestore)
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   // Skip cross-origin requests or API requests
   if (!event.request.url.startsWith(self.location.origin) || event.request.url.includes('/api/')) {
     return;
@@ -54,9 +64,10 @@ self.addEventListener('fetch', (event) => {
 
       return fetch(event.request).catch(() => {
         if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
+          return caches.match('/index.html') || caches.match('/');
         }
       });
     })
   );
 });
+
