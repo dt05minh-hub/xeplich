@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Task, TaskCategory, TaskPriority, TaskStatus, WorkConstraint } from '../types';
+import { Task, TaskCategory, TaskPriority, TaskStatus, WorkConstraint, SubCategoryDef, CategoryDef } from '../types';
 import {
   CheckSquare,
   Plus,
@@ -11,12 +11,15 @@ import {
   Sparkles,
   Shield,
   Sliders,
-  X
+  X,
+  Info
 } from 'lucide-react';
 
 interface TaskBoardViewProps {
   tasks: Task[];
   constraints: WorkConstraint[];
+  subCategories?: SubCategoryDef[];
+  categories?: CategoryDef[];
   onOpenAddTask: () => void;
   onSelectTaskForTimer: (task: Task) => void;
   onUpdateTaskStatus: (taskId: string, status: TaskStatus) => void;
@@ -30,6 +33,8 @@ interface TaskBoardViewProps {
 export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
   tasks,
   constraints,
+  subCategories = [],
+  categories = [],
   onOpenAddTask,
   onSelectTaskForTimer,
   onUpdateTaskStatus,
@@ -44,7 +49,7 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
 
   // New Constraint Form State
   const [constTitle, setConstTitle] = useState<string>('');
-  const [constCategory, setConstCategory] = useState<TaskCategory | 'all'>('cskh');
+  const [constCategory, setConstCategory] = useState<string>('all');
   const [allowedStart, setAllowedStart] = useState<string>('08:00');
   const [allowedEnd, setAllowedEnd] = useState<string>('22:00');
   const [minWeeklyHours, setMinWeeklyHours] = useState<number>(30);
@@ -61,7 +66,7 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
 
     onAddConstraint({
       title: constTitle.trim(),
-      category: constCategory,
+      category: constCategory as any,
       allowedStartTime: allowedStart,
       allowedEndTime: allowedEnd,
       minWeeklyHours,
@@ -132,7 +137,7 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
             <Shield className="w-4 h-4 text-purple-600" />
-            <span>Quy Định & Ràng Buộc Công Việc Được Khai Báo (Work Constraints)</span>
+            <span>Quy Định & Ràng Buộc Công Việc Khai Báo (Work Constraints)</span>
           </h3>
           <span className="text-xs text-purple-700 font-semibold">{constraints.length} quy định</span>
         </div>
@@ -155,18 +160,24 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
                   </button>
                 </div>
 
-                <div className="text-[11px] text-slate-600 space-y-1 font-mono">
-                  <div>Khung giờ làm: <strong className="text-indigo-700">{c.allowedStartTime} – {c.allowedEndTime}</strong></div>
-                  <div>Chỉ tiêu tối thiểu: <strong className="text-purple-700">{c.minWeeklyHours} giờ/tuần</strong></div>
-                  <div>Tối đa mỗi ca: <strong>{c.maxHoursPerShift} tiếng</strong></div>
+                <div className="text-[11px] text-slate-600 space-y-1.5 font-mono">
+                  <div>Cửa sổ ca làm: <strong className="text-indigo-700">{c.allowedStartTime} – {c.allowedEndTime}</strong> (Tự do chọn ca)</div>
+                  <div>Chỉ tiêu chung cả tuần: <strong className="text-purple-700">{c.minWeeklyHours} giờ/tuần</strong> <span className="text-[10px] text-slate-500 font-sans">(của cả công việc)</span></div>
+                  <div>Độ dài 1 ca: <strong>Tối đa {c.maxHoursPerShift} tiếng/ca</strong></div>
                 </div>
               </div>
 
-              <div className="text-[10px] text-slate-500 italic border-t border-slate-100 pt-1.5">
-                AI sẽ tuyệt đối tuân thủ khi xếp lịch tự động.
+              <div className="text-[10px] text-slate-500 italic border-t border-slate-100 pt-1.5 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-purple-500 flex-shrink-0" />
+                <span>AI tự động chia ca linh hoạt để đủ chỉ tiêu tuần này.</span>
               </div>
             </div>
           ))}
+          {constraints.length === 0 && (
+            <div className="md:col-span-3 text-center py-4 text-xs text-slate-400 italic">
+              Chưa có quy định ca làm việc nào. Bấm nút "Khai Báo Quy Định Ca Làm Việc" ở trên để tạo mới.
+            </div>
+          )}
         </div>
       </div>
 
@@ -286,8 +297,8 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
 
       {/* Modal: Add Work Constraint */}
       {showAddConstraintModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-purple-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-slate-800">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-purple-200 rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 shadow-2xl text-slate-800">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-bold text-base text-slate-800 flex items-center space-x-2">
                 <Shield className="w-5 h-5 text-purple-600" />
@@ -313,55 +324,101 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
                 <label className="block text-slate-700 font-semibold mb-1">Áp dụng cho loại công việc:</label>
                 <select
                   value={constCategory}
-                  onChange={(e) => setConstCategory(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setConstCategory(val);
+                    // Find matched subcategory to auto populate defaults if available
+                    const matched = subCategories.find((s) => s.name === val || s.id === val);
+                    if (matched) {
+                      if (matched.minWeeklyHours) setMinWeeklyHours(matched.minWeeklyHours);
+                      if (matched.preferredStartTime) setAllowedStart(matched.preferredStartTime);
+                      if (matched.preferredEndTime) setAllowedEnd(matched.preferredEndTime);
+                      if (matched.maxHoursPerShift) setMaxHoursPerShift(matched.maxHoursPerShift);
+                    }
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 font-medium focus:bg-white focus:ring-2 focus:ring-purple-500"
                 >
-                  <option value="cskh">Ca làm CSKH</option>
-                  <option value="toeic">Luyện TOEIC</option>
-                  <option value="project">Đồ án</option>
                   <option value="all">Tất cả công việc</option>
+                  {subCategories.length > 0 ? (
+                    subCategories.map((sub) => (
+                      <option key={sub.id} value={sub.name}>
+                        {sub.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Ca làm CSKH">Ca làm CSKH</option>
+                      <option value="Luyện TOEIC">Luyện TOEIC</option>
+                      <option value="Đồ án">Đồ án</option>
+                      <option value="Báo cáo">Báo cáo</option>
+                      <option value="Cá nhân">Cá nhân</option>
+                    </>
+                  )}
                 </select>
+                <p className="text-[10px] text-slate-500 mt-1 italic">
+                  💡 Bạn có thể tự thiết lập các Loại công việc theo ý muốn tại mục <b>⚙️ Cài đặt -&gt; Danh mục &amp; Loại công việc</b>.
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Khung bắt đầu:</label>
-                  <input
-                    type="time"
-                    value={allowedStart}
-                    onChange={(e) => setAllowedStart(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Khung kết thúc:</label>
-                  <input
-                    type="time"
-                    value={allowedEnd}
-                    onChange={(e) => setAllowedEnd(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs"
-                  />
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Cửa sổ khung giờ được phép làm (Tự do chọn ca):</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block mb-0.5">Giờ bắt đầu tối đa từ:</span>
+                    <input
+                      type="time"
+                      value={allowedStart}
+                      onChange={(e) => setAllowedStart(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block mb-0.5">Giờ kết thúc trễ nhất:</span>
+                    <input
+                      type="time"
+                      value={allowedEnd}
+                      onChange={(e) => setAllowedEnd(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-purple-50/70 rounded-2xl border border-purple-100 space-y-3">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Giờ tối thiểu/tuần:</label>
-                  <input
-                    type="number"
-                    value={minWeeklyHours}
-                    onChange={(e) => setMinWeeklyHours(parseInt(e.target.value, 10) || 0)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs"
-                  />
+                  <label className="block text-purple-900 font-bold mb-0.5">
+                    1. Tổng chỉ tiêu giờ tối thiểu / tuần (chung cho toàn bộ công việc):
+                  </label>
+                  <p className="text-[10px] text-purple-700 mb-1">
+                    *Con số này dành cho <b>TỔNG số giờ cả tuần</b> của loại công việc này (không phải chỉ của 1 ca đơn lẻ). AI sẽ tự chia thành các ca linh hoạt trong tuần sao cho đạt đủ chỉ tiêu.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={minWeeklyHours}
+                      onChange={(e) => setMinWeeklyHours(parseInt(e.target.value, 10) || 0)}
+                      className="w-full bg-white border border-purple-200 rounded-xl p-2 font-mono text-xs text-purple-950 font-bold"
+                    />
+                    <span className="text-xs font-bold text-purple-800 whitespace-nowrap">giờ/tuần</span>
+                  </div>
                 </div>
+
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Tối đa mỗi ca (tiếng):</label>
-                  <input
-                    type="number"
-                    value={maxHoursPerShift}
-                    onChange={(e) => setMaxHoursPerShift(parseInt(e.target.value, 10) || 0)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs"
-                  />
+                  <label className="block text-purple-900 font-bold mb-0.5">
+                    2. Độ dài tối đa cho 1 ca làm việc đơn lẻ:
+                  </label>
+                  <p className="text-[10px] text-purple-700 mb-1">
+                    *Giới hạn độ dài liên tục của 1 ca đơn lẻ (Ví dụ 4 tiếng/ca).
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={maxHoursPerShift}
+                      onChange={(e) => setMaxHoursPerShift(parseInt(e.target.value, 10) || 0)}
+                      className="w-full bg-white border border-purple-200 rounded-xl p-2 font-mono text-xs text-purple-950 font-bold"
+                    />
+                    <span className="text-xs font-bold text-purple-800 whitespace-nowrap">tiếng / ca</span>
+                  </div>
                 </div>
               </div>
 

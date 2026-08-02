@@ -20,7 +20,7 @@ export const ScheduleProposalModal: React.FC<ScheduleProposalModalProps> = ({
   if (!isOpen || !proposal) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white border border-purple-200 rounded-3xl max-w-2xl w-full p-6 space-y-5 shadow-2xl text-slate-800 max-h-[90vh] flex flex-col justify-between">
         
         {/* Header */}

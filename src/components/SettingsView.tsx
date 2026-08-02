@@ -58,8 +58,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onImportData
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'categories_package' | 'notifications' | 'backup'
+    'categories_package' | 'notifications' | 'backup' | 'ai_config'
   >('categories_package');
+
+  // Client-Side Gemini Key State
+  const [clientApiKey, setClientApiKey] = useState<string>(
+    () => localStorage.getItem('planner_gemini_key') || ''
+  );
+  const [isKeySaved, setIsKeySaved] = useState<boolean>(false);
+
+  const handleSaveApiKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem('planner_gemini_key', clientApiKey.trim());
+    setIsKeySaved(true);
+    setTimeout(() => setIsKeySaved(false), 3000);
+  };
+
+  const handleClearApiKey = () => {
+    localStorage.removeItem('planner_gemini_key');
+    setClientApiKey('');
+  };
 
   const safeCategories = categories || [];
   const safeSubCategories = subCategories || [];
@@ -249,6 +267,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         >
           <Download className="w-4 h-4" />
           <span>☁️ 3. Dữ liệu & Sao lưu</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('ai_config')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+            activeTab === 'ai_config'
+              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-xs'
+              : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>✨ 4. Cấu hình AI & Ca linh hoạt</span>
         </button>
       </div>
 
@@ -544,7 +574,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Giờ tối thiểu/tuần</label>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1" title="Chỉ tiêu tổng số giờ tối thiểu cần làm trong 1 tuần của loại công việc này">
+                          Chỉ tiêu tổng giờ/tuần
+                        </label>
                         <input
                           type="number"
                           value={newSubMinHours}
@@ -599,9 +631,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             </span>
                           </div>
                           <div className="text-[11px] text-slate-600 space-y-0.5">
-                            <p>• Thời lượng: <b>{sub.defaultDurationMinutes} phút</b></p>
-                            <p>• Khung giờ: <b>{sub.preferredStartTime} – {sub.preferredEndTime}</b></p>
-                            <p>• Tối thiểu: <b>{sub.minWeeklyHours} giờ/tuần</b></p>
+                            <p>• Thời lượng 1 ca mặc định: <b>{sub.defaultDurationMinutes} phút</b></p>
+                            <p>• Cửa sổ khung giờ: <b>{sub.preferredStartTime} – {sub.preferredEndTime}</b></p>
+                            <p>• Chỉ tiêu tổng tuần: <b>{sub.minWeeklyHours} giờ/tuần</b> (của cả loại công việc)</p>
                           </div>
                         </div>
 
@@ -776,6 +808,108 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <RotateCcw className="w-4 h-4 text-rose-600" />
               <span>Đặt Lại / Xóa Dữ Liệu</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 4: AI Config & Flexible Shift */}
+      {activeTab === 'ai_config' && (
+        <div className="space-y-6">
+          {/* Section 1: Client Gemini API Key */}
+          <div className="bg-white p-6 rounded-2xl border border-purple-200 shadow-xs space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-2xl bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-lg">
+                🔑
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Khóa API Gemini (Dùng khi chạy trên Web Tĩnh / GitHub Pages)
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Khi bạn tải tệp về hoặc đẩy app lên GitHub Pages (không có máy chủ Node.js backend), hãy dán Gemini API Key tại đây để ứng dụng tự gọi AI trực tiếp từ trình duyệt!
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveApiKey} className="space-y-3 pt-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Gemini API Key của bạn:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={clientApiKey}
+                    onChange={(e) => setClientApiKey(e.target.value)}
+                    placeholder="AQ.Ab8RN6... hoặc AIzaSy..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-purple-500"
+                  />
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold whitespace-nowrap shadow-xs transition-all"
+                  >
+                    {isKeySaved ? '✓ Đã Lưu!' : 'Lưu Key'}
+                  </button>
+                  {clientApiKey && (
+                    <button
+                      type="button"
+                      onClick={handleClearApiKey}
+                      className="px-3 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold"
+                    >
+                      Xóa
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-3 bg-purple-50/80 rounded-xl border border-purple-100 text-xs text-purple-900 space-y-1">
+                <p className="font-bold flex items-center gap-1">
+                  <span>💡 Hướng dẫn lấy Key Gemini miễn phí:</span>
+                </p>
+                <p>
+                  1. Truy cập <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline font-bold text-purple-700">Google AI Studio</a> và đăng nhập bằng tài khoản Google.
+                </p>
+                <p>2. Chọn <b>"Create API Key"</b> và dán chuỗi key đó vào ô trên.</p>
+                <p className="text-[11px] text-purple-700 italic">
+                  🔒 LƯU Ý: Key được lưu an toàn trong trình duyệt (LocalStorage) của riêng bạn và KHÔNG bao giờ bị gửi đi đâu khác.
+                </p>
+              </div>
+            </form>
+          </div>
+
+          {/* Section 2: Flexible Shift Explanation */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg">
+                ⏰
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Cấu Hình Ca Làm Việc Linh Hoạt (Flexible Shift)
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Tự do lựa chọn giờ bắt đầu & giờ kết thúc cho ca làm việc thực tế của bạn
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-700">
+              <div className="p-4 bg-indigo-50/70 rounded-xl border border-indigo-100 space-y-2">
+                <h3 className="font-bold text-indigo-900 text-sm flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                  <span>Cơ chế Ca Làm Việc Tự Do:</span>
+                </h3>
+                <p>
+                  • <b>Cửa sổ khung giờ quy định:</b> Khi bạn tạo Ràng buộc ca làm việc (ví dụ: CSKH từ <b>08:00 đến 22:00</b>), đây chỉ là <i>khung giới hạn tối đa</i>.
+                </p>
+                <p>
+                  • <b>Tự do chọn ca:</b> Bạn có thể chọn bất kỳ giờ bắt đầu và giờ kết thúc nào (ví dụ ca sáng 09:00 - 12:00, ca chiều 13:30 - 17:30 hoặc ca tối 18:00 - 21:00) miễn là nằm hoàn toàn trong cửa sổ 08:00 - 22:00.
+                </p>
+                <p>
+                  • <b>AI Tự Động Xếp Lịch Thích Ứng:</b> Khi bấm <b>"✨ Lập Lịch Tự Động AI"</b>, AI sẽ tự động tính toán thời gian rảnh của bạn và đề xuất giờ bắt đầu/kết thúc tối ưu nhất cho từng ca làm việc!
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}

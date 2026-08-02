@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, Send, Sparkles, X, User, MessageSquare, ChevronDown, Minimize2 } from 'lucide-react';
+import { requestAICopilotReply } from '../lib/aiClient';
 
 interface Message {
   id: string;
@@ -56,49 +57,26 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/ai/copilot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: textToSend.trim(),
-          stateContext
-        })
+      const reply = await requestAICopilotReply({
+        message: textToSend.trim(),
+        stateContext
       });
 
-      const responseText = await res.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        throw new Error('Phản hồi từ máy chủ không hợp lệ (không phải JSON).');
-      }
-
-      if (data.success && data.reply) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: (Date.now() + 1).toString(),
-            sender: 'ai',
-            text: data.reply
-          }
-        ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: (Date.now() + 1).toString(),
-            sender: 'ai',
-            text: data.error || 'Rất tiếc, tôi chưa thể phản hồi ngay lúc này. Vui lòng kiểm tra lại cấu hình GEMINI_API_KEY trong tệp .env nhé!'
-          }
-        ]);
-      }
-    } catch (err) {
       setMessages((prev) => [
         ...prev,
         {
           id: (Date.now() + 1).toString(),
           sender: 'ai',
-          text: 'Không thể kết nối máy chủ AI. Vui lòng kiểm tra lại kết nối mạng.'
+          text: reply
+        }
+      ]);
+    } catch (err: any) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          sender: 'ai',
+          text: err?.message || 'Không thể kết nối máy chủ AI. Vui lòng kiểm tra lại cấu hình Gemini API Key trong phần Cài đặt.'
         }
       ]);
     } finally {

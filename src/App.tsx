@@ -55,6 +55,8 @@ import {
   SyncDataPayload 
 } from './lib/firebase';
 
+import { requestAISchedule, requestAIBatchAnalyze } from './lib/aiClient';
+
 export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
 
@@ -273,37 +275,25 @@ export function App() {
     setIsAIScheduling(true);
     try {
       const activeRules = profile.learnedPreferences.filter((r) => r.isEnabled);
-      const res = await fetch('/api/ai/schedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          events,
-          tasks,
-          profile: {
-            ...profile,
-            workConstraints: constraints,
-            learnedPreferences: activeRules
-          }
-        })
+      const proposal = await requestAISchedule({
+        events,
+        tasks,
+        profile: {
+          ...profile,
+          workConstraints: constraints,
+          learnedPreferences: activeRules
+        }
       });
 
-      const responseText = await res.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        throw new Error('Máy chủ trả về dữ liệu không phải định dạng JSON. Vui lòng đảm bảo bạn đang chạy dự án bằng lệnh: npm run dev');
-      }
-
-      if (data.success && data.data) {
-        setAiProposal(data.data);
+      if (proposal && proposal.proposedItems) {
+        setAiProposal(proposal);
         setIsProposalOpen(true);
       } else {
-        alert(data.error || 'Không thể tạo lịch AI. Vui lòng kiểm tra lại tệp .env có GEMINI_API_KEY chưa.');
+        alert('Không thể tạo lịch AI. Vui lòng kiểm tra lại cấu hình Gemini API Key trong phần Cài đặt.');
       }
     } catch (err: any) {
       console.error('Lỗi khi gọi AI Schedule:', err);
-      alert('Lỗi kết nối AI: ' + (err.message || ''));
+      alert(err.message || 'Lỗi kết nối AI');
     } finally {
       setIsAIScheduling(false);
     }
@@ -380,26 +370,14 @@ export function App() {
   const handleRunBehaviorAnalyzer = async () => {
     setIsAnalyzingBehavior(true);
     try {
-      const res = await fetch('/api/ai/batch-analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          feedbackLogs,
-          trackingSessions,
-          currentRules: profile.learnedPreferences
-        })
+      const data = await requestAIBatchAnalyze({
+        feedbackLogs,
+        trackingSessions,
+        currentRules: profile.learnedPreferences
       });
 
-      const responseText = await res.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        throw new Error('Máy chủ trả về định dạng không phải JSON.');
-      }
-
-      if (data.success && data.data) {
-        const newRulesFromAI = data.data.newRules || [];
+      if (data && data.newRules) {
+        const newRulesFromAI = data.newRules || [];
 
         // Append new learned rules to profile
         setProfile((prev) => {
@@ -423,12 +401,10 @@ export function App() {
         });
 
         alert(`Bộ phân tích hành vi hoàn tất! ${newRulesFromAI.length} quy luật thích ứng mới đã được sinh ra.`);
-      } else if (data.error) {
-        alert('Lỗi phân tích hành vi: ' + data.error);
       }
     } catch (err: any) {
       console.error('Lỗi khi chạy Behavior Analyzer:', err);
-      alert('Không thể phân tích hành vi: ' + (err.message || ''));
+      alert(err.message || 'Không thể phân tích hành vi');
     } finally {
       setIsAnalyzingBehavior(false);
     }
@@ -729,6 +705,8 @@ export function App() {
           <TaskBoardView
             tasks={tasks}
             constraints={constraints}
+            categories={categories}
+            subCategories={subCategories}
             onOpenAddTask={() => setIsAddTaskOpen(true)}
             onSelectTaskForTimer={(task) => {
               setActiveTaskForTimer(task);
