@@ -1,0 +1,6 @@
+{
+  "name": "Adaptive Personal Planner",
+  "description": "AI-powered personal time management system featuring calendar sync, smart task scheduling, interactive timeline adjustments, active time tracking, and adaptive learning.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

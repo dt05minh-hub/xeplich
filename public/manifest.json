@@ -1,0 +1,26 @@
+{
+  "short_name": "AdaptivePlanner",
+  "name": "Adaptive Personal Planner - Quản Lý Thời Gian AI",
+  "description": "Hệ thống lập lịch cá nhân thông minh thích ứng theo hành vi và năng lượng với Google Gemini AI",
+  "icons": [
+    {
+      "src": "/pwa-192x192.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa-512x512.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "categories": ["productivity", "utilities", "lifestyle"]
+}
