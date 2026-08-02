@@ -21,7 +21,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci || npm install
+
+      - name: Type check (Lint)
+        run: npm run lint
 
       - name: Build Application
         run: npm run build
