@@ -14,9 +14,75 @@ app.use(express.json());
 
 let globalKeyRotationIndex = 0;
 
+export async function callGeminiApiRest(
+  key: string,
+  modelName: string,
+  promptText: string,
+  systemInstruction?: string,
+  responseSchema?: any
+): Promise<string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  const isAQKey = key.startsWith('AQ.') || !key.startsWith('AIzaSy');
+  if (isAQKey) {
+    headers['Authorization'] = `Bearer ${key}`;
+  } else {
+    headers['x-goog-api-key'] = key;
+  }
+
+  let actualModel = modelName;
+  if (actualModel === 'gemini-3.6-flash' || actualModel === 'gemini-2.5-flash') {
+    actualModel = 'gemini-2.5-flash';
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${actualModel}:generateContent`;
+
+  const bodyPayload: any = {
+    contents: [
+      {
+        parts: [{ text: promptText }],
+      },
+    ],
+  };
+
+  if (systemInstruction) {
+    bodyPayload.systemInstruction = {
+      parts: [{ text: systemInstruction }],
+    };
+  }
+
+  if (responseSchema) {
+    bodyPayload.generationConfig = {
+      responseMimeType: 'application/json',
+      responseSchema,
+    };
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(bodyPayload),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.error?.message || `Lỗi HTTP ${res.status}: ${JSON.stringify(data)}`);
+  }
+
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new Error('Không nhận được văn bản phản hồi từ Gemini API.');
+  }
+
+  return text;
+}
+
 async function executeGeminiWithRotation<T>(
   customApiKeys: string[] | undefined,
-  generatorFn: (ai: GoogleGenAI) => Promise<T>
+  generatorFn: (ai: GoogleGenAI, key: string) => Promise<T>,
+  restFallbackFn?: (key: string) => Promise<T>
 ): Promise<T> {
   let candidateKeys: string[] = [];
 
@@ -29,14 +95,14 @@ async function executeGeminiWithRotation<T>(
     candidateKeys.push(...envKeys);
   }
   if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) {
-    candidateKeys.push(process.env.GEMINI_API_KEY.trim());
+    const envKeys = process.env.GEMINI_API_KEY.split(/[\n,;]+/).map((k) => k.trim()).filter(Boolean);
+    candidateKeys.push(...envKeys);
   }
 
-  // Remove duplicates
-  candidateKeys = Array.from(new Set(candidateKeys));
+  candidateKeys = Array.from(new Set(candidateKeys)).filter(Boolean);
 
   if (candidateKeys.length === 0) {
-    throw new Error('Chưa cấu hình GEMINI_API_KEY. Vui lòng tạo tệp .env tại thư mục gốc dự án và thêm GEMINI_API_KEY="AIzaSy..."');
+    throw new Error('Chưa cấu hình GEMINI_API_KEY. Vui lòng dán API Key Gemini vào phần [⚙️ Cài Đặt] -> [Cấu Hình AI & API Key].');
   }
 
   const errors: string[] = [];
@@ -45,30 +111,58 @@ async function executeGeminiWithRotation<T>(
   for (let attempt = 0; attempt < totalKeys; attempt++) {
     const keyIdx = (globalKeyRotationIndex + attempt) % totalKeys;
     const currentKey = candidateKeys[keyIdx];
+    const isAQToken = currentKey.startsWith('AQ.');
 
+    // Attempt direct REST call first if it is an AQ token
+    if (isAQToken && restFallbackFn) {
+      try {
+        const result = await restFallbackFn(currentKey);
+        globalKeyRotationIndex = (keyIdx + 1) % totalKeys;
+        return result;
+      } catch (restErr: any) {
+        const errMsg = restErr?.message || String(restErr);
+        console.warn(`[Gemini AQ Token #${keyIdx + 1} Direct REST Failed]: ${errMsg}.`);
+        errors.push(`Key #${keyIdx + 1} (AQ Token): ${errMsg}`);
+      }
+    }
+
+    // Try standard SDK
     try {
+      const headers: Record<string, string> = {
+        'User-Agent': 'aistudio-build',
+      };
+      if (isAQToken) {
+        headers['Authorization'] = `Bearer ${currentKey}`;
+      }
+
       const ai = new GoogleGenAI({
         apiKey: currentKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
+        httpOptions: { headers },
       });
 
-      const result = await generatorFn(ai);
-      
-      // Update index for next request
+      const result = await generatorFn(ai, currentKey);
       globalKeyRotationIndex = (keyIdx + 1) % totalKeys;
       return result;
     } catch (err: any) {
       const errMsg = err?.message || String(err);
-      console.warn(`[Gemini Key #${keyIdx + 1} Failed]: ${errMsg}. Tự động xoay tua sang Key tiếp theo...`);
+      console.warn(`[Gemini Key #${keyIdx + 1} Failed]: ${errMsg}.`);
+
+      if (restFallbackFn && !isAQToken) {
+        try {
+          const result = await restFallbackFn(currentKey);
+          globalKeyRotationIndex = (keyIdx + 1) % totalKeys;
+          return result;
+        } catch (restErr: any) {
+          errors.push(`Key #${keyIdx + 1}: ${restErr?.message || String(restErr)}`);
+          continue;
+        }
+      }
+
       errors.push(`Key #${keyIdx + 1}: ${errMsg}`);
     }
   }
 
-  throw new Error(`Tất cả ${totalKeys} API Key Gemini đều gặp lỗi hoặc hết hạn mức Quota (Lỗi 429 Rate Limit).\n\nChi tiết:\n` + errors.join('\n'));
+  throw new Error(`Tất cả ${totalKeys} API Key Gemini đã cấu hình đều không thành công.\n\nChi tiết lỗi:\n` + errors.join('\n'));
 }
 
 // 1. AI Lập lịch Tự động (AI Smart Scheduler)
@@ -113,48 +207,57 @@ Hãy trả về JSON đúng định dạng với:
 - tips: Mảng lời khuyên thực tế cho người dùng (Tiếng Việt)
     `.trim();
 
-    const result = await executeGeminiWithRotation(apiKeys, async (ai) => {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: promptText,
-        config: {
-          systemInstruction,
-          responseMimeType: 'application/json',
-          responseSchema: {
+    const scheduleSchema = {
+      type: Type.OBJECT,
+      properties: {
+        summary: { type: Type.STRING },
+        proposedItems: {
+          type: Type.ARRAY,
+          items: {
             type: Type.OBJECT,
             properties: {
-              summary: { type: Type.STRING },
-              proposedItems: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    taskId: { type: Type.STRING },
-                    taskTitle: { type: Type.STRING },
-                    category: { type: Type.STRING },
-                    date: { type: Type.STRING },
-                    startTime: { type: Type.STRING },
-                    endTime: { type: Type.STRING },
-                    reasoning: { type: Type.STRING }
-                  },
-                  required: ['taskId', 'taskTitle', 'category', 'date', 'startTime', 'endTime', 'reasoning']
-                }
-              },
-              conflictsResolved: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              },
-              tips: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              }
+              taskId: { type: Type.STRING },
+              taskTitle: { type: Type.STRING },
+              category: { type: Type.STRING },
+              date: { type: Type.STRING },
+              startTime: { type: Type.STRING },
+              endTime: { type: Type.STRING },
+              reasoning: { type: Type.STRING }
             },
-            required: ['summary', 'proposedItems']
+            required: ['taskId', 'taskTitle', 'category', 'date', 'startTime', 'endTime', 'reasoning']
           }
+        },
+        conflictsResolved: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING }
+        },
+        tips: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING }
         }
-      });
-      return JSON.parse(response.text || '{}');
-    });
+      },
+      required: ['summary', 'proposedItems']
+    };
+
+    const result = await executeGeminiWithRotation(
+      apiKeys,
+      async (ai) => {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.6-flash',
+          contents: promptText,
+          config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: scheduleSchema
+          }
+        });
+        return JSON.parse(response.text || '{}');
+      },
+      async (key) => {
+        const text = await callGeminiApiRest(key, 'gemini-2.5-flash', promptText, systemInstruction, scheduleSchema);
+        return JSON.parse(text || '{}');
+      }
+    );
 
     return res.json({ success: true, data: result });
   } catch (error: any) {
@@ -197,41 +300,50 @@ Hãy tổng hợp và trả về JSON:
 - recommendedAdjustments: Mảng gợi ý điều chỉnh khung giờ làm việc cho tuần sau (Tiếng Việt)
     `.trim();
 
-    const result = await executeGeminiWithRotation(apiKeys, async (ai) => {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: promptText,
-        config: {
-          systemInstruction,
-          responseMimeType: 'application/json',
-          responseSchema: {
+    const analyzeSchema = {
+      type: Type.OBJECT,
+      properties: {
+        analysisSummary: { type: Type.STRING },
+        newRules: {
+          type: Type.ARRAY,
+          items: {
             type: Type.OBJECT,
             properties: {
-              analysisSummary: { type: Type.STRING },
-              newRules: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    ruleText: { type: Type.STRING },
-                    category: { type: Type.STRING },
-                    confidence: { type: Type.NUMBER },
-                    derivedFrom: { type: Type.STRING }
-                  },
-                  required: ['ruleText', 'confidence', 'derivedFrom']
-                }
-              },
-              recommendedAdjustments: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              }
+              ruleText: { type: Type.STRING },
+              category: { type: Type.STRING },
+              confidence: { type: Type.NUMBER },
+              derivedFrom: { type: Type.STRING }
             },
-            required: ['analysisSummary', 'newRules']
+            required: ['ruleText', 'confidence', 'derivedFrom']
           }
+        },
+        recommendedAdjustments: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING }
         }
-      });
-      return JSON.parse(response.text || '{}');
-    });
+      },
+      required: ['analysisSummary', 'newRules']
+    };
+
+    const result = await executeGeminiWithRotation(
+      apiKeys,
+      async (ai) => {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.6-flash',
+          contents: promptText,
+          config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: analyzeSchema
+          }
+        });
+        return JSON.parse(response.text || '{}');
+      },
+      async (key) => {
+        const text = await callGeminiApiRest(key, 'gemini-2.5-flash', promptText, systemInstruction, analyzeSchema);
+        return JSON.parse(text || '{}');
+      }
+    );
 
     return res.json({ success: true, data: result });
   } catch (error: any) {
@@ -267,33 +379,42 @@ Trả về JSON gồm:
 - estimationAccuracyPercent: Tỷ lệ phần trăm độ chính xác dự kiến (0-100)
     `.trim();
 
-    const result = await executeGeminiWithRotation(apiKeys, async (ai) => {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: promptText,
-        config: {
-          systemInstruction,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              aiAnalysisText: { type: Type.STRING },
-              strengths: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              },
-              recommendations: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              },
-              estimationAccuracyPercent: { type: Type.NUMBER }
-            },
-            required: ['aiAnalysisText', 'strengths', 'recommendations', 'estimationAccuracyPercent']
+    const insightsSchema = {
+      type: Type.OBJECT,
+      properties: {
+        aiAnalysisText: { type: Type.STRING },
+        strengths: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING }
+        },
+        recommendations: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING }
+        },
+        estimationAccuracyPercent: { type: Type.NUMBER }
+      },
+      required: ['aiAnalysisText', 'strengths', 'recommendations', 'estimationAccuracyPercent']
+    };
+
+    const result = await executeGeminiWithRotation(
+      apiKeys,
+      async (ai) => {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.6-flash',
+          contents: promptText,
+          config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: insightsSchema
           }
-        }
-      });
-      return JSON.parse(response.text || '{}');
-    });
+        });
+        return JSON.parse(response.text || '{}');
+      },
+      async (key) => {
+        const text = await callGeminiApiRest(key, 'gemini-2.5-flash', promptText, systemInstruction, insightsSchema);
+        return JSON.parse(text || '{}');
+      }
+    );
 
     return res.json({ success: true, insights: result });
   } catch (error: any) {
@@ -320,14 +441,20 @@ Câu hỏi từ người dùng:
 "${message}"
     `.trim();
 
-    const replyText = await executeGeminiWithRotation(apiKeys, async (ai) => {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: promptText,
-        config: { systemInstruction }
-      });
-      return response.text;
-    });
+    const replyText = await executeGeminiWithRotation(
+      apiKeys,
+      async (ai) => {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.6-flash',
+          contents: promptText,
+          config: { systemInstruction }
+        });
+        return response.text;
+      },
+      async (key) => {
+        return await callGeminiApiRest(key, 'gemini-2.5-flash', promptText, systemInstruction);
+      }
+    );
 
     return res.json({ success: true, reply: replyText });
   } catch (error: any) {

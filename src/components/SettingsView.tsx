@@ -881,7 +881,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     type="password"
                     value={clientApiKey}
                     onChange={(e) => setClientApiKey(e.target.value)}
-                    placeholder="AQ.Ab8RN6... hoặc AIzaSy..."
+                    placeholder="AIzaSy..."
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-purple-500"
                   />
                   <button

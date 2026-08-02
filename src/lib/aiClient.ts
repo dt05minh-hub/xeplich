@@ -25,35 +25,126 @@ export function getStoredGeminiKeys(): string[] {
   return Array.from(new Set(keys));
 }
 
+export async function callGeminiApiRest(
+  key: string,
+  modelName: string,
+  promptText: string,
+  systemInstruction?: string,
+  responseSchema?: any
+): Promise<string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  const isAQKey = key.startsWith('AQ.') || !key.startsWith('AIzaSy');
+  if (isAQKey) {
+    headers['Authorization'] = `Bearer ${key}`;
+  } else {
+    headers['x-goog-api-key'] = key;
+  }
+
+  let actualModel = modelName;
+  if (actualModel === 'gemini-3.6-flash' || actualModel === 'gemini-2.5-flash') {
+    actualModel = 'gemini-2.5-flash';
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${actualModel}:generateContent`;
+
+  const bodyPayload: any = {
+    contents: [
+      {
+        parts: [{ text: promptText }],
+      },
+    ],
+  };
+
+  if (systemInstruction) {
+    bodyPayload.systemInstruction = {
+      parts: [{ text: systemInstruction }],
+    };
+  }
+
+  if (responseSchema) {
+    bodyPayload.generationConfig = {
+      responseMimeType: 'application/json',
+      responseSchema,
+    };
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(bodyPayload),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.error?.message || `Lỗi HTTP ${res.status}: ${JSON.stringify(data)}`);
+  }
+
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new Error('Không nhận được văn bản phản hồi từ Gemini API.');
+  }
+
+  return text;
+}
+
 /**
  * Thực thi gọi Gemini API trực tiếp từ Trình duyệt (Client-side)
  * tự động xoay tua danh sách API Keys nếu gặp lỗi Rate Limit (429) hoặc hết Quota.
  */
 async function executeClientGemini<T>(
-  generatorFn: (ai: GoogleGenAI) => Promise<T>
+  generatorFn: (ai: GoogleGenAI) => Promise<T>,
+  restFallbackFn?: (key: string) => Promise<T>
 ): Promise<T> {
   const keys = getStoredGeminiKeys();
 
   if (keys.length === 0) {
     throw new Error(
-      'Chưa cấu hình Gemini API Key trên Web Tĩnh (GitHub Pages).\n\nVui lòng mở trang [⚙️ Cài Đặt] -> [Cấu Hình AI & API Key] và paste API Key Gemini của bạn để dùng AI trực tiếp trên trình duyệt nhé!'
+      'Chưa cấu hình Gemini API Key.\n\nVui lòng mở trang [⚙️ Cài Đặt] -> [Cấu Hình AI & API Key] và nhập API Key Gemini của bạn!'
     );
   }
 
   const errors: string[] = [];
   for (let i = 0; i < keys.length; i++) {
     const apiKey = keys[i];
+    const isAQKey = apiKey.startsWith('AQ.');
+
+    if (isAQKey && restFallbackFn) {
+      try {
+        return await restFallbackFn(apiKey);
+      } catch (restErr: any) {
+        console.warn(`[Client Direct REST AQ Token #${i + 1} Error]:`, restErr);
+        errors.push(`Key #${i + 1} (AQ Token): ${restErr?.message || String(restErr)}`);
+        continue;
+      }
+    }
+
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const headers: Record<string, string> = {};
+      if (isAQKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+      const ai = new GoogleGenAI({ apiKey, httpOptions: { headers } });
       return await generatorFn(ai);
     } catch (err: any) {
       console.warn(`[Client Gemini Key #${i + 1} Error]:`, err);
-      errors.push(`Key #${i + 1}: ${err?.message || String(err)}`);
+      if (restFallbackFn && !isAQKey) {
+        try {
+          return await restFallbackFn(apiKey);
+        } catch (restErr: any) {
+          errors.push(`Key #${i + 1}: ${restErr?.message || String(restErr)}`);
+          continue;
+        }
+      }
+      const errMsg = err?.message || String(err);
+      errors.push(`Key #${i + 1}: ${errMsg}`);
     }
   }
 
   throw new Error(
-    'Tất cả Gemini API Key đã cấu hình đều gặp lỗi hoặc hết hạn mức.\n' + errors.join('\n')
+    'Tất cả Gemini API Key đã cấu hình trong ứng dụng đều không khả dụng.\n\nChi tiết:\n' + errors.join('\n') + '\n\n👉 Vui lòng vào [⚙️ Cài Đặt] -> [Cấu Hình AI & API Key] để cập nhật lại Gemini API Key.'
   );
 }
 
@@ -66,29 +157,29 @@ export async function requestAISchedule(payload: {
   profile: any;
   userPrompt?: string;
 }): Promise<AIScheduleProposal> {
+  const clientKeys = getStoredGeminiKeys();
   // Thử gọi Server API trước
   try {
     const res = await fetch('/api/ai/schedule', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...payload, apiKeys: clientKeys })
     });
 
     const contentType = res.headers.get('content-type') || '';
-    if (res.ok && contentType.includes('application/json')) {
+    if (contentType.includes('application/json')) {
       const data = await res.json();
-      if (data.success && data.data) {
+      if (res.ok && data.success && data.data) {
         return data.data;
       }
       if (data.error) throw new Error(data.error);
     }
   } catch (serverErr: any) {
-    console.warn('Server API /api/ai/schedule không khả dụng hoặc trả về Web Tĩnh 404, chuyển sang Client-side AI:', serverErr.message);
+    console.warn('Server API /api/ai/schedule gặp lỗi, chuyển sang Client-side AI:', serverErr.message);
   }
 
   // Fallback Client-Side Direct Call
-  return executeClientGemini(async (ai) => {
-    const systemInstruction = `
+  const systemInstruction = `
 Bạn là Trí tuệ Nhân tạo Lập lịch Tự động của ứng dụng "Adaptive Personal Planner".
 Nhiệm vụ: Phân tích các sự kiện lịch cố định (lịch học, lịch thi, họp CLB) đã bị KHÓA KHUNG GIỜ, khoảng thời gian trống, hạn chót công việc (deadline), mức ưu tiên, các RÀNG BUỘC CÔNG VIỆC và các QUY LUẬT THÍCH ỨNG để tự động phân bổ lịch làm việc tối ưu.
 
@@ -102,9 +193,9 @@ QUY TẮC BẮT BUỘC:
 2. Tôn trọng các Ràng buộc công việc & Ca làm việc linh hoạt.
 3. Tôn trọng các Quy luật Thích ứng (Adaptive Rules) đang được BẬT.
 4. Trả về kết quả hoàn toàn bằng TIẾNG VIỆT tự nhiên, thân thiện.
-    `.trim();
+  `.trim();
 
-    const promptText = `
+  const promptText = `
 Lịch cố định (Bị khóa khung giờ):
 ${JSON.stringify(payload.events, null, 2)}
 
@@ -116,51 +207,59 @@ ${JSON.stringify(payload.profile, null, 2)}
 
 Yêu cầu thêm từ người dùng:
 "${payload.userPrompt || 'Hãy tự động lập lịch làm việc và học tập tối ưu cho tuần này.'}"
-    `.trim();
+  `.trim();
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: promptText,
-      config: {
-        systemInstruction,
-        responseMimeType: 'application/json',
-        responseSchema: {
+  const scheduleSchema = {
+    type: Type.OBJECT,
+    properties: {
+      summary: { type: Type.STRING },
+      proposedItems: {
+        type: Type.ARRAY,
+        items: {
           type: Type.OBJECT,
           properties: {
-            summary: { type: Type.STRING },
-            proposedItems: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  taskId: { type: Type.STRING },
-                  taskTitle: { type: Type.STRING },
-                  category: { type: Type.STRING },
-                  date: { type: Type.STRING },
-                  startTime: { type: Type.STRING },
-                  endTime: { type: Type.STRING },
-                  reasoning: { type: Type.STRING }
-                },
-                required: ['taskId', 'taskTitle', 'category', 'date', 'startTime', 'endTime', 'reasoning']
-              }
-            },
-            conflictsResolved: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            },
-            tips: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            }
+            taskId: { type: Type.STRING },
+            taskTitle: { type: Type.STRING },
+            category: { type: Type.STRING },
+            date: { type: Type.STRING },
+            startTime: { type: Type.STRING },
+            endTime: { type: Type.STRING },
+            reasoning: { type: Type.STRING }
           },
-          required: ['summary', 'proposedItems']
+          required: ['taskId', 'taskTitle', 'category', 'date', 'startTime', 'endTime', 'reasoning']
         }
+      },
+      conflictsResolved: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING }
+      },
+      tips: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING }
       }
-    });
+    },
+    required: ['summary', 'proposedItems']
+  };
 
-    const parsed = JSON.parse(response.text || '{}');
-    return parsed as AIScheduleProposal;
-  });
+  return executeClientGemini(
+    async (ai) => {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: promptText,
+        config: {
+          systemInstruction,
+          responseMimeType: 'application/json',
+          responseSchema: scheduleSchema
+        }
+      });
+      const parsed = JSON.parse(response.text || '{}');
+      return parsed as AIScheduleProposal;
+    },
+    async (key) => {
+      const text = await callGeminiApiRest(key, 'gemini-2.5-flash', promptText, systemInstruction, scheduleSchema);
+      return JSON.parse(text || '{}') as AIScheduleProposal;
+    }
+  );
 }
 
 // -----------------------------------------------------------------------------
@@ -170,28 +269,29 @@ export async function requestAICopilotReply(payload: {
   message: string;
   stateContext: any;
 }): Promise<string> {
+  const clientKeys = getStoredGeminiKeys();
   // Thử gọi Server API trước
   try {
     const res = await fetch('/api/ai/copilot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...payload, apiKeys: clientKeys })
     });
 
     const contentType = res.headers.get('content-type') || '';
-    if (res.ok && contentType.includes('application/json')) {
+    if (contentType.includes('application/json')) {
       const data = await res.json();
-      if (data.success && data.reply) {
+      if (res.ok && data.success && data.reply) {
         return data.reply;
       }
+      if (data.error) throw new Error(data.error);
     }
   } catch (err: any) {
-    console.warn('Server API /api/ai/copilot không khả dụng, dùng Client-side AI:', err.message);
+    console.warn('Server API /api/ai/copilot gặp lỗi, chuyển sang Client-side AI:', err.message);
   }
 
   // Fallback Client-Side Call
-  return executeClientGemini(async (ai) => {
-    const systemInstruction = `
+  const systemInstruction = `
 Bạn là Trợ Lý AI Lập Lịch Thích Ứng (Adaptive Planner Copilot).
 Nhiệm vụ: Tư vấn, gợi ý phân bổ thời gian, tư vấn ca làm việc linh hoạt, học tập và giải đáp thắc mắc cho người dùng.
 
@@ -199,24 +299,29 @@ LƯU Ý VỀ CA LÀM VIỆC LINH HOẠT:
 Người dùng có ca làm việc tự do chọn giờ bắt đầu và kết thúc miễn là nằm trong khung giờ quy định. Hãy hỗ trợ họ chọn giờ làm hiệu quả nhất!
 
 Hãy trả lời bằng TIẾNG VIỆT tự nhiên, ngắn gọn, súc tích, định dạng Markdown đẹp mắt.
-    `.trim();
+  `.trim();
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: `
+  const promptText = `
 Bối cảnh ứng dụng hiện tại:
 ${JSON.stringify(payload.stateContext, null, 2)}
 
 Câu hỏi/Yêu cầu từ người dùng:
 "${payload.message}"
-      `.trim(),
-      config: {
-        systemInstruction
-      }
-    });
+  `.trim();
 
-    return response.text || 'Rất tiếc, tôi chưa thể trả lời ngay lúc này.';
-  });
+  return executeClientGemini(
+    async (ai) => {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: promptText,
+        config: { systemInstruction }
+      });
+      return response.text || 'Rất tiếc, tôi chưa thể trả lời ngay lúc này.';
+    },
+    async (key) => {
+      return await callGeminiApiRest(key, 'gemini-2.5-flash', promptText, systemInstruction);
+    }
+  );
 }
 
 // -----------------------------------------------------------------------------
@@ -231,67 +336,78 @@ export async function requestAIBatchAnalyze(payload: {
   newRules: Array<{ ruleText: string; category?: string; confidence: number; derivedFrom: string }>;
   recommendedAdjustments?: string[];
 }> {
+  const clientKeys = getStoredGeminiKeys();
   try {
     const res = await fetch('/api/ai/batch-analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...payload, apiKeys: clientKeys })
     });
 
     const contentType = res.headers.get('content-type') || '';
-    if (res.ok && contentType.includes('application/json')) {
+    if (contentType.includes('application/json')) {
       const data = await res.json();
-      if (data.success && data.data) {
+      if (res.ok && data.success && data.data) {
         return data.data;
       }
+      if (data.error) throw new Error(data.error);
     }
   } catch (err: any) {
-    console.warn('Server API /api/ai/batch-analyze không khả dụng, dùng Client-side AI:', err.message);
+    console.warn('Server API /api/ai/batch-analyze gặp lỗi, dùng Client-side AI:', err.message);
   }
 
-  return executeClientGemini(async (ai) => {
-    const systemInstruction = `
+  const systemInstruction = `
 Bạn là Bộ Phân Tích Hành Vi (Behavior Analyzer) của Adaptive Personal Planner.
 Nhiệm vụ: Xem xét nhật ký đổi giờ, đổi ca làm việc linh hoạt, hoãn task và thời gian thực hiện thực tế để rút ra Quy luật Thích ứng mới bằng TIẾNG VIỆT.
-    `.trim();
+  `.trim();
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: `
+  const promptText = `
 Lịch sử Phản hồi: ${JSON.stringify(payload.feedbackLogs, null, 2)}
 Phiên Theo Dõi: ${JSON.stringify(payload.trackingSessions, null, 2)}
 Quy luật hiện tại: ${JSON.stringify(payload.currentRules, null, 2)}
-      `.trim(),
-      config: {
-        systemInstruction,
-        responseMimeType: 'application/json',
-        responseSchema: {
+  `.trim();
+
+  const analyzeSchema = {
+    type: Type.OBJECT,
+    properties: {
+      analysisSummary: { type: Type.STRING },
+      newRules: {
+        type: Type.ARRAY,
+        items: {
           type: Type.OBJECT,
           properties: {
-            analysisSummary: { type: Type.STRING },
-            newRules: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  ruleText: { type: Type.STRING },
-                  category: { type: Type.STRING },
-                  confidence: { type: Type.NUMBER },
-                  derivedFrom: { type: Type.STRING }
-                },
-                required: ['ruleText', 'confidence', 'derivedFrom']
-              }
-            },
-            recommendedAdjustments: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            }
+            ruleText: { type: Type.STRING },
+            category: { type: Type.STRING },
+            confidence: { type: Type.NUMBER },
+            derivedFrom: { type: Type.STRING }
           },
-          required: ['analysisSummary', 'newRules']
+          required: ['ruleText', 'confidence', 'derivedFrom']
         }
+      },
+      recommendedAdjustments: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING }
       }
-    });
+    },
+    required: ['analysisSummary', 'newRules']
+  };
 
-    return JSON.parse(response.text || '{}');
-  });
+  return executeClientGemini(
+    async (ai) => {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: promptText,
+        config: {
+          systemInstruction,
+          responseMimeType: 'application/json',
+          responseSchema: analyzeSchema
+        }
+      });
+      return JSON.parse(response.text || '{}');
+    },
+    async (key) => {
+      const text = await callGeminiApiRest(key, 'gemini-2.5-flash', promptText, systemInstruction, analyzeSchema);
+      return JSON.parse(text || '{}');
+    }
+  );
 }
