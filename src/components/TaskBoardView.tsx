@@ -12,7 +12,8 @@ import {
   Shield,
   Sliders,
   X,
-  Info
+  Info,
+  Pencil
 } from 'lucide-react';
 
 interface TaskBoardViewProps {
@@ -25,6 +26,7 @@ interface TaskBoardViewProps {
   onUpdateTaskStatus: (taskId: string, status: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
   onAddConstraint: (constraint: Omit<WorkConstraint, 'id'>) => void;
+  onUpdateConstraint?: (constraint: WorkConstraint) => void;
   onDeleteConstraint: (constraintId: string) => void;
   onTriggerAISchedule: () => void;
   isAIScheduling: boolean;
@@ -40,6 +42,7 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
   onUpdateTaskStatus,
   onDeleteTask,
   onAddConstraint,
+  onUpdateConstraint,
   onDeleteConstraint,
   onTriggerAISchedule,
   isAIScheduling,
@@ -47,7 +50,8 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [showAddConstraintModal, setShowAddConstraintModal] = useState<boolean>(false);
 
-  // New Constraint Form State
+  // New/Edit Constraint Form State
+  const [editingConstraintId, setEditingConstraintId] = useState<string | null>(null);
   const [constTitle, setConstTitle] = useState<string>('');
   const [constCategory, setConstCategory] = useState<string>('all');
   const [allowedStart, setAllowedStart] = useState<string>('08:00');
@@ -60,39 +64,96 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
     return true;
   });
 
-  const handleCreateConstraint = (e: React.FormEvent) => {
+  const handleOpenAddConstraint = () => {
+    setEditingConstraintId(null);
+    setConstTitle('');
+    setConstCategory('all');
+    setAllowedStart('08:00');
+    setAllowedEnd('22:00');
+    setMinWeeklyHours(30);
+    setMaxHoursPerShift(4);
+    setShowAddConstraintModal(true);
+  };
+
+  const handleOpenEditConstraint = (c: WorkConstraint) => {
+    setEditingConstraintId(c.id);
+    setConstTitle(c.title);
+    setConstCategory(c.category || 'all');
+    setAllowedStart(c.allowedStartTime || '08:00');
+    setAllowedEnd(c.allowedEndTime || '22:00');
+    setMinWeeklyHours(c.minWeeklyHours ?? 30);
+    setMaxHoursPerShift(c.maxHoursPerShift ?? 4);
+    setShowAddConstraintModal(true);
+  };
+
+  const handleSaveConstraint = (e: React.FormEvent) => {
     e.preventDefault();
     if (!constTitle.trim()) return;
 
-    onAddConstraint({
-      title: constTitle.trim(),
-      category: constCategory as any,
-      allowedStartTime: allowedStart,
-      allowedEndTime: allowedEnd,
-      minWeeklyHours,
-      maxHoursPerShift,
-      offDays: [0], // Default Sunday off
-    });
+    if (editingConstraintId && onUpdateConstraint) {
+      onUpdateConstraint({
+        id: editingConstraintId,
+        title: constTitle.trim(),
+        category: constCategory as any,
+        allowedStartTime: allowedStart,
+        allowedEndTime: allowedEnd,
+        minWeeklyHours,
+        maxHoursPerShift,
+        offDays: [0], // Default Sunday off
+      });
+    } else {
+      onAddConstraint({
+        title: constTitle.trim(),
+        category: constCategory as any,
+        allowedStartTime: allowedStart,
+        allowedEndTime: allowedEnd,
+        minWeeklyHours,
+        maxHoursPerShift,
+        offDays: [0], // Default Sunday off
+      });
+    }
 
     setConstTitle('');
+    setEditingConstraintId(null);
     setShowAddConstraintModal(false);
   };
 
-  const getCategoryBadge = (category: TaskCategory) => {
-    switch (category) {
-      case 'cskh':
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">Ca làm CSKH</span>;
-      case 'toeic':
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">Luyện TOEIC</span>;
-      case 'project':
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">Đồ án</span>;
-      case 'report':
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-100 text-pink-800 border border-pink-200">Báo cáo</span>;
-      case 'reading':
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Đọc tài liệu</span>;
-      default:
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">Cá nhân</span>;
+  const getCategoryBadge = (category: string) => {
+    const matchedCategory = categories.find((c) => c.id === category);
+    if (matchedCategory) {
+      return (
+        <span
+          className="px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center space-x-1"
+          style={{
+            backgroundColor: `${matchedCategory.color}20`,
+            color: matchedCategory.color,
+            borderColor: `${matchedCategory.color}40`
+          }}
+        >
+          <span>{matchedCategory.icon}</span>
+          <span>{matchedCategory.name}</span>
+        </span>
+      );
     }
+    const catNameMap: Record<string, string> = {
+      cskh: 'Ca làm CSKH',
+      toeic: 'Luyện TOEIC',
+      project: 'Đồ án',
+      report: 'Báo cáo',
+      reading: 'Đọc tài liệu',
+      personal: 'Cá nhân',
+      study: 'Học tập',
+      work: 'Làm việc',
+      health: 'Sức khỏe',
+      finance: 'Tài chính',
+      entertainment: 'Giải trí'
+    };
+    const displayName = catNameMap[category] || category || 'Công việc';
+    return (
+      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+        {displayName}
+      </span>
+    );
   };
 
   return (
@@ -115,7 +176,7 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setShowAddConstraintModal(true)}
+            onClick={handleOpenAddConstraint}
             className="px-3.5 py-2 bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200 rounded-2xl text-xs font-bold shadow-2xs flex items-center space-x-1.5 transition-all"
           >
             <Shield className="w-4 h-4 text-teal-600" />
@@ -151,13 +212,22 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-xs text-slate-800">{c.title}</span>
-                  <button
-                    onClick={() => onDeleteConstraint(c.id)}
-                    className="text-slate-400 hover:text-rose-500"
-                    title="Xóa quy định"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={() => handleOpenEditConstraint(c)}
+                      className="text-slate-400 hover:text-purple-600 p-1 rounded-lg hover:bg-purple-50 transition-colors"
+                      title="Chỉnh sửa quy định"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => onDeleteConstraint(c.id)}
+                      className="text-slate-400 hover:text-rose-500 p-1 rounded-lg hover:bg-rose-50 transition-colors"
+                      title="Xóa quy định"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="text-[11px] text-slate-600 space-y-1.5 font-mono">
@@ -193,12 +263,32 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
               className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-medium"
             >
               <option value="all">Tất cả ({tasks.length})</option>
-              <option value="cskh">Ca làm CSKH</option>
-              <option value="toeic">Luyện TOEIC</option>
-              <option value="project">Đồ án</option>
-              <option value="report">Báo cáo</option>
-              <option value="reading">Đọc tài liệu</option>
-              <option value="personal">Cá nhân</option>
+              {Array.from(
+                new Set([
+                  ...tasks.map((t) => t.category).filter(Boolean),
+                  ...constraints.map((c) => c.category).filter(Boolean),
+                  ...categories.map((c) => c.id)
+                ])
+              ).map((catId) => {
+                const catDef = categories.find((c) => c.id === catId);
+                const count = tasks.filter((t) => t.category === catId).length;
+                const catNameMap: Record<string, string> = {
+                  cskh: 'Ca làm CSKH',
+                  toeic: 'Luyện TOEIC',
+                  project: 'Đồ án',
+                  report: 'Báo cáo',
+                  reading: 'Đọc tài liệu',
+                  personal: 'Cá nhân',
+                  study: 'Học tập',
+                  work: 'Làm việc'
+                };
+                const label = catDef ? `${catDef.icon} ${catDef.name}` : (catNameMap[catId] || catId);
+                return (
+                  <option key={catId} value={catId}>
+                    {label} ({count})
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -302,12 +392,12 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-bold text-base text-slate-800 flex items-center space-x-2">
                 <Shield className="w-5 h-5 text-purple-600" />
-                <span>Khai Báo Quy Định Lập Lịch Mới</span>
+                <span>{editingConstraintId ? 'Chỉnh Sửa Quy Định Lập Lịch' : 'Khai Báo Quy Định Lập Lịch Mới'}</span>
               </h3>
               <button onClick={() => setShowAddConstraintModal(false)} className="text-slate-400 hover:text-slate-700">✕</button>
             </div>
 
-            <form onSubmit={handleCreateConstraint} className="space-y-3 text-xs">
+            <form onSubmit={handleSaveConstraint} className="space-y-3 text-xs">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Tên quy định / Tên ca:</label>
                 <input
@@ -339,21 +429,16 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 font-medium focus:bg-white focus:ring-2 focus:ring-purple-500"
                 >
                   <option value="all">Tất cả công việc</option>
-                  {subCategories.length > 0 ? (
-                    subCategories.map((sub) => (
-                      <option key={sub.id} value={sub.name}>
-                        {sub.name}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="Ca làm CSKH">Ca làm CSKH</option>
-                      <option value="Luyện TOEIC">Luyện TOEIC</option>
-                      <option value="Đồ án">Đồ án</option>
-                      <option value="Báo cáo">Báo cáo</option>
-                      <option value="Cá nhân">Cá nhân</option>
-                    </>
-                  )}
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.icon} {cat.name}
+                    </option>
+                  ))}
+                  {subCategories.map((sub) => (
+                    <option key={sub.id} value={sub.id}>
+                      ↳ {sub.name}
+                    </option>
+                  ))}
                 </select>
                 <p className="text-[10px] text-slate-500 mt-1 italic">
                   💡 Bạn có thể tự thiết lập các Loại công việc theo ý muốn tại mục <b>⚙️ Cài đặt -&gt; Danh mục &amp; Loại công việc</b>.
@@ -434,7 +519,7 @@ export const TaskBoardView: React.FC<TaskBoardViewProps> = ({
                   type="submit"
                   className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-xs"
                 >
-                  Lưu Quy Định
+                  {editingConstraintId ? 'Cập Nhật Quy Định' : 'Lưu Quy Định'}
                 </button>
               </div>
             </form>

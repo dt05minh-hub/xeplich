@@ -535,7 +535,7 @@ export const CalendarTimelineView: React.FC<CalendarTimelineViewProps> = ({
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
               <h3 className="text-base font-bold text-slate-800">Lịch Chi Tiết Ngày Hôm Nay</h3>
-              <p className="text-xs text-slate-500">Hiển thị đầy đủ tên công việc, ca làm CSKH, khung giờ và ghi chú</p>
+              <p className="text-xs text-slate-500">Hiển thị đầy đủ tên công việc, ca làm việc, khung giờ và ghi chú</p>
             </div>
             <span className="px-3 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 font-mono font-bold text-xs rounded-xl">
               {todayIso}
@@ -610,7 +610,7 @@ export const CalendarTimelineView: React.FC<CalendarTimelineViewProps> = ({
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
               <h3 className="text-base font-bold text-slate-800">Lịch Tổng Quan Tháng 07 / 2026</h3>
-              <p className="text-xs text-slate-500">Xem tất cả các ca làm CSKH, lịch học cố định và bài tập trong tháng</p>
+              <p className="text-xs text-slate-500">Xem tất cả các ca làm việc, lịch học cố định và bài tập trong tháng</p>
             </div>
             <div className="flex items-center space-x-2 text-xs">
               <span className="flex items-center space-x-1">

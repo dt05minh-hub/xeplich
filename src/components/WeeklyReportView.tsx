@@ -104,15 +104,15 @@ export const WeeklyReportView: React.FC<WeeklyReportViewProps> = ({
           {/* Grid 1: Total Hours Distribution */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white rounded-3xl p-4 border border-blue-100 shadow-2xs space-y-1 text-center">
-              <span className="text-[11px] font-bold text-slate-500 uppercase">Ca Làm CSKH</span>
+              <span className="text-[11px] font-bold text-slate-500 uppercase">Làm Việc / Ca Làm</span>
               <div className="text-2xl font-black text-blue-700 font-mono">{totalWorkHours} tiếng</div>
-              <span className="text-[10px] text-emerald-600 font-semibold">Đạt chỉ tiêu tuần</span>
+              <span className="text-[10px] text-emerald-600 font-semibold">Tự động tích lũy</span>
             </div>
 
             <div className="bg-white rounded-3xl p-4 border border-purple-100 shadow-2xs space-y-1 text-center">
-              <span className="text-[11px] font-bold text-slate-500 uppercase">Học Tập & Đồ Án</span>
+              <span className="text-[11px] font-bold text-slate-500 uppercase">Học Tập & Nghiên Cứu</span>
               <div className="text-2xl font-black text-purple-700 font-mono">{totalStudyHours} tiếng</div>
-              <span className="text-[10px] text-purple-600 font-semibold">TOEIC + Đồ án</span>
+              <span className="text-[10px] text-purple-600 font-semibold">Tự động tích lũy</span>
             </div>
 
             <div className="bg-white rounded-3xl p-4 border border-pink-100 shadow-2xs space-y-1 text-center">
@@ -210,7 +210,7 @@ export const WeeklyReportView: React.FC<WeeklyReportViewProps> = ({
                 Báo Cáo Tổng Hợp {monthlyReport.monthName}
               </h1>
               <p className="text-xs sm:text-sm text-indigo-100 mt-1">
-                Thống kê chi tiết ca làm CSKH, tiến độ học tập và phân tích xu hướng hiệu suất hàng tháng.
+                Thống kê chi tiết ca làm việc, tiến độ học tập và phân tích xu hướng hiệu suất hàng tháng.
               </p>
             </div>
 
@@ -223,13 +223,13 @@ export const WeeklyReportView: React.FC<WeeklyReportViewProps> = ({
           {/* Grid 1: Monthly Total Hours */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white rounded-3xl p-4 border border-blue-100 shadow-2xs space-y-1 text-center">
-              <span className="text-[11px] font-bold text-slate-500 uppercase">Tổng Ca Làm CSKH</span>
+              <span className="text-[11px] font-bold text-slate-500 uppercase">Làm Việc / Ca Làm</span>
               <div className="text-2xl font-black text-blue-700 font-mono">{mWorkHours} tiếng</div>
-              <span className="text-[10px] text-blue-800 font-semibold">{monthlyReport.totalShiftsCompleted} ca làm chuẩn</span>
+              <span className="text-[10px] text-blue-800 font-semibold">{monthlyReport.totalShiftsCompleted} ca làm việc</span>
             </div>
 
             <div className="bg-white rounded-3xl p-4 border border-purple-100 shadow-2xs space-y-1 text-center">
-              <span className="text-[11px] font-bold text-slate-500 uppercase">Học Tập & Đồ Án</span>
+              <span className="text-[11px] font-bold text-slate-500 uppercase">Học Tập & Nghiên Cứu</span>
               <div className="text-2xl font-black text-purple-700 font-mono">{mStudyHours} tiếng</div>
               <span className="text-[10px] text-purple-600 font-semibold">Tích lũy cả tháng</span>
             </div>
@@ -257,7 +257,7 @@ export const WeeklyReportView: React.FC<WeeklyReportViewProps> = ({
 
               <div className="space-y-3 text-xs">
                 <div className="p-3 bg-blue-50 rounded-2xl border border-blue-200 flex justify-between items-center font-bold text-blue-900">
-                  <span>Số ca CSKH hoàn thành:</span>
+                  <span>Số ca làm việc hoàn thành:</span>
                   <span className="font-mono text-base text-blue-800">{monthlyReport.totalShiftsCompleted} ca</span>
                 </div>
 

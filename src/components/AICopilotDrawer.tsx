@@ -25,7 +25,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     {
       id: 'msg-1',
       sender: 'ai',
-      text: 'Xin chào! Tôi là Trợ Lý AI Lập Lịch Thích Ứng. Bạn cần tư vấn sắp xếp lịch học, ca CSKH hay tối ưu thời gian hôm nay?'
+      text: 'Xin chào! Tôi là Trợ Lý AI Lập Lịch Thích Ứng. Bạn cần tư vấn sắp xếp lịch học, ca làm việc hay tối ưu thời gian hôm nay?'
     }
   ]);
   const [input, setInput] = useState('');
@@ -86,7 +86,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
 
   const quickQuestions = [
     'Gợi ý lịch học tối nay',
-    'Cân bằng ca CSKH & Đồ án',
+    'Cân bằng lịch học & ca làm',
     'Phân tích khung giờ năng lượng'
   ];
 

@@ -345,7 +345,7 @@ export const AdaptiveInsightsView: React.FC<AdaptiveInsightsViewProps> = ({
                 rows={3}
                 value={newRuleInput}
                 onChange={(e) => setNewRuleInput(e.target.value)}
-                placeholder="Ví dụ: Ưu tiên xếp Ca làm CSKH vào chiều Thứ 3 và Thứ 5..."
+                placeholder="Ví dụ: Ưu tiên xếp ca làm việc vào chiều Thứ 3 và Thứ 5..."
                 className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500"
               />
             </div>

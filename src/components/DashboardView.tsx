@@ -4,7 +4,8 @@ import {
   CalendarEvent,
   AdaptiveUserProfile,
   TimeTrackSession,
-  TaskStatus
+  TaskStatus,
+  WorkConstraint
 } from '../types';
 import {
   LayoutDashboard,
@@ -25,6 +26,7 @@ interface DashboardViewProps {
   events: CalendarEvent[];
   profile: AdaptiveUserProfile;
   trackingSessions: TimeTrackSession[];
+  constraints?: WorkConstraint[];
   onSelectTaskForTimer: (task: Task) => void;
   onUpdateTaskStatus: (taskId: string, status: TaskStatus) => void;
   onNavigateToTab: (tab: any) => void;
@@ -37,6 +39,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   events,
   profile,
   trackingSessions,
+  constraints = [],
   onSelectTaskForTimer,
   onUpdateTaskStatus,
   onNavigateToTab,
@@ -69,35 +72,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     .sort((a, b) => (a.deadline! > b.deadline! ? 1 : -1))
     .slice(0, 3);
 
-  // 5. Total Remaining Hours Calculation vs Target
-  const targetCategoryMap: Record<string, { targetMinutes: number; actualMinutes: number; label: string }> = {
-    cskh: {
-      targetMinutes: (profile.weeklyTargetHours.cskh || 30) * 60,
-      actualMinutes: 0,
-      label: 'Ca làm CSKH'
-    },
-    toeic: {
-      targetMinutes: (profile.weeklyTargetHours.toeic || 10) * 60,
-      actualMinutes: 0,
-      label: 'Luyện thi TOEIC'
-    },
-    project: {
-      targetMinutes: (profile.weeklyTargetHours.project || 12) * 60,
-      actualMinutes: 0,
-      label: 'Đồ án Chuyên ngành'
-    },
-    report: {
-      targetMinutes: (profile.weeklyTargetHours.report || 4) * 60,
-      actualMinutes: 0,
-      label: 'Báo cáo & Bài viết'
-    }
-  };
+  // 5. Total Remaining Hours Calculation vs Target (Dynamic from Constraints & Profile)
+  const allConstraints = constraints.length > 0 ? constraints : (profile.workConstraints || []);
+  
+  // Build dynamic target list
+  const dynamicTargetList = allConstraints.map((c) => {
+    const targetMin = (c.minWeeklyHours || 0) * 60;
+    // Calculate actual minutes spent from tasks matching this category or constraint title
+    const actualMin = tasks.reduce((sum, t) => {
+      if (t.category === c.category || (c.title && t.title.toLowerCase().includes(c.title.toLowerCase()))) {
+        return sum + (t.actualMinutesSpent || 0);
+      }
+      return sum;
+    }, 0);
 
-  // Sum actual minutes spent from tasks & sessions
-  tasks.forEach((t) => {
-    if (targetCategoryMap[t.category]) {
-      targetCategoryMap[t.category].actualMinutes += t.actualMinutesSpent;
-    }
+    return {
+      id: c.id,
+      label: c.title,
+      targetMinutes: targetMin,
+      actualMinutes: actualMin,
+      category: c.category
+    };
   });
 
   // Timeline hours range (08:00 - 22:00)
@@ -203,37 +198,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-xs text-purple-700 font-semibold">Chỉ tiêu theo tuần</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-            {Object.entries(targetCategoryMap).map(([key, item]) => {
-              const remainingMin = Math.max(0, item.targetMinutes - item.actualMinutes);
-              const remainingHours = (remainingMin / 60).toFixed(1);
-              const targetHours = (item.targetMinutes / 60).toFixed(0);
-              const progressPct = Math.min(100, Math.round((item.actualMinutes / item.targetMinutes) * 100));
+          {dynamicTargetList.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              {dynamicTargetList.map((item) => {
+                const remainingMin = Math.max(0, item.targetMinutes - item.actualMinutes);
+                const remainingHours = (remainingMin / 60).toFixed(1);
+                const targetHours = (item.targetMinutes / 60).toFixed(0);
+                const progressPct = item.targetMinutes > 0 
+                  ? Math.min(100, Math.round((item.actualMinutes / item.targetMinutes) * 100))
+                  : 0;
 
-              return (
-                <div key={key} className="bg-purple-50/50 p-3.5 rounded-2xl border border-purple-100 space-y-2">
-                  <div className="flex justify-between items-center font-semibold text-slate-700">
-                    <span>{item.label}</span>
-                    <span className="text-purple-800 font-bold font-mono">
-                      Còn thiếu {remainingHours}h / {targetHours}h
-                    </span>
-                  </div>
+                return (
+                  <div key={item.id} className="bg-purple-50/50 p-3.5 rounded-2xl border border-purple-100 space-y-2">
+                    <div className="flex justify-between items-center font-semibold text-slate-700">
+                      <span>{item.label}</span>
+                      <span className="text-purple-800 font-bold font-mono">
+                        Còn thiếu {remainingHours}h / {targetHours}h
+                      </span>
+                    </div>
 
-                  <div className="w-full bg-purple-200/60 h-2.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full transition-all duration-500"
-                      style={{ width: `${progressPct}%` }}
-                    />
-                  </div>
+                    <div className="w-full bg-purple-200/60 h-2.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${progressPct}%` }}
+                      />
+                    </div>
 
-                  <div className="flex justify-between text-[10px] text-slate-500">
-                    <span>Đã làm: {(item.actualMinutes / 60).toFixed(1)} tiếng</span>
-                    <span>{progressPct}% hoàn thành</span>
+                    <div className="flex justify-between text-[10px] text-slate-500">
+                      <span>Đã làm: {(item.actualMinutes / 60).toFixed(1)} tiếng</span>
+                      <span>{progressPct}% hoàn thành</span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-6 text-center text-xs text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
+              <p className="font-semibold text-slate-700">Chưa có quy định ca làm việc / chỉ tiêu giờ tuần nào.</p>
+              <p className="text-[11px] text-slate-500">Bấm "Tự Động Tối Ưu Lịch Tuần" hoặc chuyển sang tab "Lập Lịch" để khai báo các quy định ca làm của riêng bạn!</p>
+            </div>
+          )}
         </div>
 
       </div>

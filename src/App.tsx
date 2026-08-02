@@ -510,6 +510,10 @@ export function App() {
     setConstraints((prev) => [...prev, newC]);
   };
 
+  const handleUpdateConstraint = (updated: WorkConstraint) => {
+    setConstraints((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+  };
+
   const handleDeleteConstraint = (id: string) => {
     setConstraints((prev) => prev.filter((c) => c.id !== id));
   };
@@ -715,6 +719,7 @@ export function App() {
             onUpdateTaskStatus={handleUpdateTaskStatus}
             onDeleteTask={handleDeleteTask}
             onAddConstraint={handleAddConstraint}
+            onUpdateConstraint={handleUpdateConstraint}
             onDeleteConstraint={handleDeleteConstraint}
             onTriggerAISchedule={handleTriggerAISchedule}
             isAIScheduling={isAIScheduling}

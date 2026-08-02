@@ -67,6 +67,46 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   );
   const [isKeySaved, setIsKeySaved] = useState<boolean>(false);
 
+  // Flexible Shift Configuration State
+  const DEFAULT_SHIFT_CONFIG = {
+    title: 'Cấu Hình Ca Làm Việc Linh Hoạt (Flexible Shift)',
+    subtitle: 'Tự do lựa chọn giờ bắt đầu & giờ kết thúc cho ca làm việc thực tế của bạn',
+    mechanismTitle: 'Cơ chế Ca Làm Việc Tự Do:',
+    ruleWindow: 'Khi bạn tạo Ràng buộc ca làm việc (ví dụ: Ca làm từ 08:00 đến 22:00), đây chỉ là khung giới hạn tối đa.',
+    freeChoice: 'Bạn có thể chọn bất kỳ giờ bắt đầu và giờ kết thúc nào (ví dụ ca sáng 09:00 - 12:00, ca chiều 13:30 - 17:30 hoặc ca tối 18:00 - 21:00) miễn là nằm hoàn toàn trong cửa sổ 08:00 - 22:00.',
+    aiSchedule: 'Khi bấm "✨ Lập Lịch Tự Động AI", AI sẽ tự động tính toán thời gian rảnh của bạn và đề xuất giờ bắt đầu/kết thúc tối ưu nhất cho từng ca làm việc!'
+  };
+
+  const [shiftConfig, setShiftConfig] = useState(() => {
+    const saved = localStorage.getItem('flexible_shift_config');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return DEFAULT_SHIFT_CONFIG;
+  });
+
+  const [isEditingShift, setIsEditingShift] = useState(false);
+  const [tempShiftConfig, setTempShiftConfig] = useState(shiftConfig);
+  const [isShiftSaved, setIsShiftSaved] = useState(false);
+
+  const handleSaveShiftConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    setShiftConfig(tempShiftConfig);
+    localStorage.setItem('flexible_shift_config', JSON.stringify(tempShiftConfig));
+    setIsEditingShift(false);
+    setIsShiftSaved(true);
+    setTimeout(() => setIsShiftSaved(false), 3000);
+  };
+
+  const handleResetShiftConfig = () => {
+    if (confirm('Khôi phục nội dung cấu hình ca làm việc linh hoạt về mặc định?')) {
+      setShiftConfig(DEFAULT_SHIFT_CONFIG);
+      setTempShiftConfig(DEFAULT_SHIFT_CONFIG);
+      localStorage.setItem('flexible_shift_config', JSON.stringify(DEFAULT_SHIFT_CONFIG));
+      setIsEditingShift(false);
+    }
+  };
+
   const handleSaveApiKey = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('planner_gemini_key', clientApiKey.trim());
@@ -879,37 +919,149 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {/* Section 2: Flexible Shift Explanation */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg">
-                ⏰
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg">
+                  ⏰
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    {shiftConfig.title}
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    {shiftConfig.subtitle}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-base font-bold text-slate-900">
-                  Cấu Hình Ca Làm Việc Linh Hoạt (Flexible Shift)
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Tự do lựa chọn giờ bắt đầu & giờ kết thúc cho ca làm việc thực tế của bạn
-                </p>
-              </div>
+              {!isEditingShift && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempShiftConfig(shiftConfig);
+                    setIsEditingShift(true);
+                  }}
+                  className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-colors flex items-center space-x-1"
+                >
+                  ✏️ <span>Chỉnh sửa</span>
+                </button>
+              )}
             </div>
 
-            <div className="space-y-3 text-xs text-slate-700">
-              <div className="p-4 bg-indigo-50/70 rounded-xl border border-indigo-100 space-y-2">
-                <h3 className="font-bold text-indigo-900 text-sm flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-indigo-600" />
-                  <span>Cơ chế Ca Làm Việc Tự Do:</span>
-                </h3>
-                <p>
-                  • <b>Cửa sổ khung giờ quy định:</b> Khi bạn tạo Ràng buộc ca làm việc (ví dụ: CSKH từ <b>08:00 đến 22:00</b>), đây chỉ là <i>khung giới hạn tối đa</i>.
-                </p>
-                <p>
-                  • <b>Tự do chọn ca:</b> Bạn có thể chọn bất kỳ giờ bắt đầu và giờ kết thúc nào (ví dụ ca sáng 09:00 - 12:00, ca chiều 13:30 - 17:30 hoặc ca tối 18:00 - 21:00) miễn là nằm hoàn toàn trong cửa sổ 08:00 - 22:00.
-                </p>
-                <p>
-                  • <b>AI Tự Động Xếp Lịch Thích Ứng:</b> Khi bấm <b>"✨ Lập Lịch Tự Động AI"</b>, AI sẽ tự động tính toán thời gian rảnh của bạn và đề xuất giờ bắt đầu/kết thúc tối ưu nhất cho từng ca làm việc!
-                </p>
+            {isShiftSaved && (
+              <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-medium flex items-center space-x-2">
+                <span>✓</span>
+                <span>Đã cập nhật cấu hình ca làm việc linh hoạt thành công!</span>
               </div>
-            </div>
+            )}
+
+            {!isEditingShift ? (
+              <div className="space-y-3 text-xs text-slate-700">
+                <div className="p-4 bg-indigo-50/70 rounded-xl border border-indigo-100 space-y-2">
+                  <h3 className="font-bold text-indigo-900 text-sm flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                    <span>{shiftConfig.mechanismTitle}</span>
+                  </h3>
+                  <p>
+                    • <b>Cửa sổ khung giờ quy định:</b> {shiftConfig.ruleWindow}
+                  </p>
+                  <p>
+                    • <b>Tự do chọn ca:</b> {shiftConfig.freeChoice}
+                  </p>
+                  <p>
+                    • <b>AI Tự Động Xếp Lịch Thích Ứng:</b> {shiftConfig.aiSchedule}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveShiftConfig} className="space-y-3 text-xs pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Tiêu đề chính:</label>
+                  <input
+                    type="text"
+                    value={tempShiftConfig.title}
+                    onChange={(e) => setTempShiftConfig({ ...tempShiftConfig, title: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 font-semibold focus:ring-2 focus:ring-indigo-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Mô tả phụ đề:</label>
+                  <input
+                    type="text"
+                    value={tempShiftConfig.subtitle}
+                    onChange={(e) => setTempShiftConfig({ ...tempShiftConfig, subtitle: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Tiêu đề cơ chế:</label>
+                  <input
+                    type="text"
+                    value={tempShiftConfig.mechanismTitle}
+                    onChange={(e) => setTempShiftConfig({ ...tempShiftConfig, mechanismTitle: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">• Cửa sổ khung giờ quy định:</label>
+                  <textarea
+                    rows={2}
+                    value={tempShiftConfig.ruleWindow}
+                    onChange={(e) => setTempShiftConfig({ ...tempShiftConfig, ruleWindow: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">• Tự do chọn ca:</label>
+                  <textarea
+                    rows={2}
+                    value={tempShiftConfig.freeChoice}
+                    onChange={(e) => setTempShiftConfig({ ...tempShiftConfig, freeChoice: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">• AI Tự Động Xếp Lịch Thích Ứng:</label>
+                  <textarea
+                    rows={2}
+                    value={tempShiftConfig.aiSchedule}
+                    onChange={(e) => setTempShiftConfig({ ...tempShiftConfig, aiSchedule: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={handleResetShiftConfig}
+                    className="px-3 py-2 text-slate-500 hover:text-rose-600 font-semibold text-xs transition-colors"
+                  >
+                    🔄 Khôi phục mặc định
+                  </button>
+
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingShift(false)}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-xs transition-colors"
+                    >
+                      💾 Lưu Thay Đổi
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
