@@ -24,8 +24,9 @@ export function SyncModal({
 
   if (!isOpen) return null;
 
-  const currentUrl = window.location.origin + window.location.pathname;
-  const shareUrl = `${currentUrl}?sync=${encodeURIComponent(inputKey)}`;
+  const rawOrigin = window.location.origin;
+  const publicOrigin = rawOrigin.replace('ais-dev-', 'ais-pre-');
+  const shareUrl = `${publicOrigin}${window.location.pathname}?sync=${encodeURIComponent(inputKey)}`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(shareUrl)}`;
 
   const handleCopyLink = () => {
@@ -136,6 +137,13 @@ export function SyncModal({
                 <QrCode className="w-4 h-4" />
                 {showQR ? 'Ẩn Mã QR' : 'Quét Mã QR Điện Thoại'}
               </button>
+            </div>
+
+            <div className="p-2.5 bg-slate-100/80 rounded-lg text-[11px] font-mono text-slate-600 break-all border border-slate-200">
+              <span className="font-semibold text-slate-700 font-sans block mb-0.5">Link Công Khai Cho Điện Thoại:</span>
+              <a href={shareUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+                {shareUrl}
+              </a>
             </div>
 
             {showQR && (

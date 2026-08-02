@@ -51,7 +51,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
+    caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
       if (cachedResponse) {
         // Fetch fresh copy in background to keep cache updated
         fetch(event.request).then((networkResponse) => {
@@ -63,8 +63,8 @@ self.addEventListener('fetch', (event) => {
       }
 
       return fetch(event.request).catch(() => {
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html') || caches.match('/');
+        if (event.request.mode === 'navigate' || event.request.headers.get('accept')?.includes('text/html')) {
+          return caches.match('/index.html', { ignoreSearch: true }) || caches.match('/', { ignoreSearch: true });
         }
       });
     })
